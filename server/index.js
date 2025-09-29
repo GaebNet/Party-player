@@ -47,9 +47,25 @@ function generateRoomCode() {
  * Extract YouTube video ID from URL
  */
 function extractYouTubeVideoId(url) {
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[7].length === 11) ? match[7] : null;
+  if (!url) return null;
+
+  // Handle youtu.be short links
+  const shortLinkMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortLinkMatch) return shortLinkMatch[1];
+
+  // Handle youtube.com URLs with various formats
+  const longLinkMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (longLinkMatch) return longLinkMatch[1];
+
+  // Handle embed URLs
+  const embedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch) return embedMatch[1];
+
+  // Handle youtube.com/watch URLs
+  const watchMatch = url.match(/youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/);
+  if (watchMatch) return watchMatch[1];
+
+  return null;
 }
 
 /**
@@ -192,21 +208,26 @@ io.on('connection', (socket) => {
    * Load a video (host only)
    */
   socket.on('load-video', ({ roomCode, videoUrl }) => {
+    console.log(`Load video request: roomCode=${roomCode}, videoUrl=${videoUrl}`);
+
     const room = rooms[roomCode];
-    
     if (!room) {
+      console.log(`Room not found: ${roomCode}`);
       socket.emit('error', { message: 'Room not found' });
       return;
     }
 
     if (room.host !== socket.id) {
+      console.log(`User ${socket.id} is not host of room ${roomCode}`);
       socket.emit('error', { message: 'Only the host can load videos' });
       return;
     }
 
     const videoId = extractYouTubeVideoId(videoUrl);
-    
+    console.log(`Extracted video ID: ${videoId} from URL: ${videoUrl}`);
+
     if (!videoId) {
+      console.log(`Invalid YouTube URL: ${videoUrl}`);
       socket.emit('error', { message: 'Invalid YouTube URL' });
       return;
     }
@@ -220,9 +241,9 @@ io.on('connection', (socket) => {
     };
 
     // Broadcast to all users in room
-    io.to(roomCode).emit('video-loaded', { 
+    io.to(roomCode).emit('video-loaded', {
       videoId,
-      title: room.currentVideo.title 
+      title: room.currentVideo.title
     });
 
     console.log(`Video loaded in room ${roomCode}: ${videoId}`);

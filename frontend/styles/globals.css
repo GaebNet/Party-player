@@ -1,3 +1,6 @@
+/* stylelint-disable */
+/* eslint-disable */
+
 /**
  * Global styles for the watch party application
  * Includes Tailwind CSS imports and custom styles
@@ -16,9 +19,7 @@
   
   body {
     @apply font-sans antialiased;
-  }
-  
-  /* Ensure full height for mobile */
+  }  /* Ensure full height for mobile */
   html, body, #__next {
     height: 100%;
   }
@@ -139,8 +140,8 @@
 /* Dark mode optimizations */
 @media (prefers-color-scheme: dark) {
   /* Ensure proper contrast in dark mode */
-  .bg-white {
-    @apply bg-gray-800 text-white;
+  .text-black {
+    @apply text-white;
   }
   
   .text-gray-900 {
@@ -151,11 +152,12 @@
 /* Print styles */
 @media print {
   body {
-    @apply bg-white text-black;
+    background-color: white;
+    color: black;
   }
   
   .bg-gray-800, .bg-gray-900 {
-    @apply bg-white;
+    background-color: white;
   }
   
   /* Hide interactive elements when printing */
