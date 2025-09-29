@@ -39,14 +39,39 @@ This starts both the backend server (port 3001) and Next.js frontend (port 3000)
 
 ### Production Deployment
 
-1. **Build the frontend:**
-```bash
-npm run build
-```
+#### Frontend (Netlify)
+1. **Connect to Netlify:**
+   - Push your code to GitHub
+   - Connect your repository to Netlify
+   - Netlify will automatically detect the `netlify.toml` configuration
 
-2. **Start production servers:**
+2. **Environment Variables in Netlify:**
+   - Set `NEXT_PUBLIC_SERVER_URL` to your deployed backend URL
+   - Example: `https://your-backend-app.herokuapp.com`
+
+3. **Deploy:**
+   - Netlify will build and deploy automatically on git push
+   - The `@netlify/plugin-nextjs` handles SSR and routing
+
+#### Backend (WebSocket-compatible host)
+Since Netlify doesn't support persistent WebSocket connections, deploy the backend separately:
+
+**Recommended platforms:**
+- **Railway** (recommended for simplicity)
+- **Render** (free tier available)
+- **Heroku** (traditional choice)
+- **DigitalOcean App Platform**
+
+1. **Deploy backend to chosen platform**
+2. **Update frontend environment variable** with the backend URL
+3. **Redeploy frontend** with new environment variable
+
+**Example Railway deployment:**
 ```bash
-npm start
+# In server directory
+railway login
+railway init
+railway up
 ```
 
 ## 📁 Project Structure
@@ -77,10 +102,15 @@ watch-party/
 
 ### Environment Variables
 
-#### Frontend (frontend/.env.local)
+#### Frontend
+**Development (frontend/.env.local):**
 ```bash
 NEXT_PUBLIC_SERVER_URL=http://localhost:3001  # Backend server URL
 ```
+
+**Production (Netlify Dashboard):**
+- Go to Site Settings → Environment Variables
+- Add: `NEXT_PUBLIC_SERVER_URL=https://your-backend-domain.com`
 
 #### Backend (server/.env)
 ```bash
