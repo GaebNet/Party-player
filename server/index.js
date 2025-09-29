@@ -25,12 +25,22 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+// Global error handler
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    rooms: Object.keys(rooms).length
+    rooms: Object.keys(rooms).length,
+    uptime: process.uptime()
   });
 });
 
