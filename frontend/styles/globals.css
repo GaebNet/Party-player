@@ -1,0 +1,194 @@
+/**
+ * Global styles for the watch party application
+ * Includes Tailwind CSS imports and custom styles
+ */
+
+/* Tailwind CSS imports */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply font-sans antialiased;
+  }
+  
+  /* Ensure full height for mobile */
+  html, body, #__next {
+    height: 100%;
+  }
+}
+
+/* Custom component styles */
+@layer components {
+  /* Custom scrollbar for chat */
+  .chat-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .chat-scrollbar::-webkit-scrollbar-track {
+    @apply bg-gray-700 rounded;
+  }
+  
+  .chat-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-500 rounded hover:bg-gray-400;
+  }
+  
+  /* Custom focus styles */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800;
+  }
+  
+  /* Button transitions */
+  .btn-transition {
+    @apply transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+  
+  /* Loading spinner */
+  .spinner {
+    @apply inline-block w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Glass morphism effect */
+  .glass {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* PWA specific styles */
+@media (display-mode: standalone) {
+  body {
+    /* Add padding for status bar on mobile PWAs */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Hide browser UI elements in standalone mode */
+  .pwa-hidden {
+    display: none;
+  }
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  /* Improve touch targets */
+  button, input, textarea, select {
+    min-height: 44px;
+  }
+  
+  /* Prevent zoom on input focus */
+  input, textarea, select {
+    font-size: 16px;
+  }
+  
+  /* YouTube player responsive */
+  #youtube-player iframe {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bg-gray-800 {
+    @apply border border-gray-600;
+  }
+  
+  .text-gray-500 {
+    @apply text-gray-300;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark mode optimizations */
+@media (prefers-color-scheme: dark) {
+  /* Ensure proper contrast in dark mode */
+  .bg-white {
+    @apply bg-gray-800 text-white;
+  }
+  
+  .text-gray-900 {
+    @apply text-gray-100;
+  }
+}
+
+/* Print styles */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+  
+  .bg-gray-800, .bg-gray-900 {
+    @apply bg-white;
+  }
+  
+  /* Hide interactive elements when printing */
+  button, input, video, #youtube-player {
+    display: none !important;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s infinite;
+}

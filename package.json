@@ -1,0 +1,22 @@
+{
+  "name": "ephemeral-watch-party",
+  "version": "1.0.0",
+  "description": "A complete ephemeral watch party PWA for synchronized YouTube viewing",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
+    "dev:server": "cd server && node index.js",
+    "dev:frontend": "cd frontend && next dev",
+    "build": "cd frontend && next build",
+    "start": "concurrently \"npm run start:server\" \"npm run start:frontend\"",
+    "start:server": "cd server && node index.js",
+    "start:frontend": "cd frontend && next start",
+    "install:all": "npm install && cd server && npm install && cd ../frontend && npm install"
+  },
+  "keywords": ["watch-party", "pwa", "youtube", "real-time", "chat"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
