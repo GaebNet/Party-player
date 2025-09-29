@@ -47,6 +47,20 @@ export default function Room() {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
       tag.async = true;
+      tag.onerror = () => {
+        console.warn('Failed to load YouTube API script');
+        // Try loading again after a delay
+        setTimeout(() => {
+          if (!window.YT && !isPlayerReady) {
+            console.log('Retrying YouTube API load...');
+            const retryTag = document.createElement('script');
+            retryTag.src = 'https://www.youtube.com/iframe_api';
+            retryTag.async = true;
+            document.head.appendChild(retryTag);
+          }
+        }, 3000);
+      };
+
       const firstScriptTag = document.getElementsByTagName('script')[0];
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
@@ -54,21 +68,33 @@ export default function Room() {
       window.onYouTubeIframeAPIReady = () => {
         console.log('YouTube API loaded successfully');
         setIsPlayerReady(true);
+        setError(''); // Clear any previous errors
       };
 
-      // Fallback: check if API is already loaded
+      // Fallback: check if API is already loaded (longer timeout)
       setTimeout(() => {
         if (window.YT && window.YT.Player && !isPlayerReady) {
           console.log('YouTube API was already loaded');
           setIsPlayerReady(true);
+          setError('');
         } else if (!isPlayerReady) {
-          console.warn('YouTube API failed to load, videos may not work');
-          setError('YouTube API failed to load. Videos may not work properly.');
+          console.warn('YouTube API is taking longer to load, but videos should still work');
+          setError('YouTube API is loading slowly. Videos may take a moment to start.');
+          // Keep checking every 5 seconds
+          const checkInterval = setInterval(() => {
+            if (window.YT && window.YT.Player && !isPlayerReady) {
+              console.log('YouTube API loaded after delay');
+              setIsPlayerReady(true);
+              setError('');
+              clearInterval(checkInterval);
+            }
+          }, 5000);
         }
-      }, 5000);
+      }, 10000); // Increased timeout to 10 seconds
     } else if (window.YT && window.YT.Player) {
       console.log('YouTube API already available');
       setIsPlayerReady(true);
+      setError('');
     }
 
     // Check if mobile
@@ -76,117 +102,7 @@ export default function Room() {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isPlayerReady]);
-
-  /**
-   * Initialize socket connection and join room
-   */
-  useEffect(() => {
-    if (!code || !username) return;
-
-    const socketInstance = io(process.env.NEXT_PUBLIC_SERVER_URL);
-    setSocket(socketInstance);
-
-    socketInstance.on('connect', () => {
-      setIsConnected(true);
-      console.log('Connected to server, joining room:', code);
-      socketInstance.emit('join-room', { 
-        roomCode: code.toUpperCase(), // Ensure uppercase
-        username: decodeURIComponent(username) 
-      });
-    });
-
-    socketInstance.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    socketInstance.on('joined-room', (data) => {
-      setRoomData(data);
-      setIsHost(data.isHost);
-      setCurrentVideo(data.currentVideo);
-      setMessages(data.messages || []);
-      setUsers(data.users || []);
-    });
-
-    socketInstance.on('error', (data) => {
-      console.error('Socket error:', data.message);
-      setError(data.message);
-      // If room not found, redirect to home after 3 seconds
-      if (data.message === 'Room not found') {
-        setTimeout(() => {
-          router.push('/');
-        }, 3000);
-      }
-    });
-
-    // Video events
-    socketInstance.on('video-loaded', (data) => {
-      setCurrentVideo({ videoId: data.videoId, title: data.title });
-      setIsVideoLoading(false);
-      loadVideoInPlayer(data.videoId);
-    });
-
-    socketInstance.on('video-play', (data) => {
-      if (playerRef.current && playerRef.current.seekTo && playerRef.current.playVideo) {
-        playerRef.current.seekTo(data.time, true);
-        playerRef.current.playVideo();
-      }
-    });
-
-    socketInstance.on('video-pause', (data) => {
-      if (playerRef.current && playerRef.current.seekTo && playerRef.current.pauseVideo) {
-        playerRef.current.seekTo(data.time, true);
-        playerRef.current.pauseVideo();
-      }
-    });
-
-    socketInstance.on('video-seek', (data) => {
-      if (playerRef.current && playerRef.current.seekTo) {
-        playerRef.current.seekTo(data.time, true);
-      }
-    });
-
-    // Chat events
-    socketInstance.on('new-message', (message) => {
-      setMessages(prev => [...prev, message]);
-    });
-
-    // User events
-    socketInstance.on('user-joined', (data) => {
-      setUsers(prev => [...prev, data.user]);
-    });
-
-    socketInstance.on('user-left', (data) => {
-      setUsers(prev => prev.filter(u => u.id !== data.user.id));
-      if (data.newHost) {
-        setIsHost(data.newHost.id === socketInstance.id);
-      }
-    });
-
-    socketInstance.on('new-host', (data) => {
-      setIsHost(data.newHost.id === socketInstance.id);
-    });
-
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, [code, username, router, loadVideoInPlayer]);
-
-  /**
-   * Auto-scroll chat to bottom
-   */
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  /**
-   * Create YouTube player when ready and video is loaded
-   */
-  useEffect(() => {
-    if (isPlayerReady && currentVideo && currentVideo.videoId && !playerRef.current) {
-      loadVideoInPlayer(currentVideo.videoId);
-    }
-  }, [isPlayerReady, currentVideo, loadVideoInPlayer]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Load video in YouTube player
@@ -255,6 +171,150 @@ export default function Room() {
       }
     });
   }, [isHost, socket, code, setError, setIsVideoLoading]);
+
+  /**
+   * Initialize socket connection and join room
+   */
+  useEffect(() => {
+    if (!code || !username) return;
+
+    console.log('Creating Socket.IO connection...');
+
+    // Create socket with stable configuration
+    const socketInstance = io(process.env.NEXT_PUBLIC_SERVER_URL, {
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      randomizationFactor: 0.5
+    });
+
+    setSocket(socketInstance);
+
+    socketInstance.on('connect', () => {
+      setIsConnected(true);
+      console.log('Connected to server, joining room:', code);
+      socketInstance.emit('join-room', {
+        roomCode: code.toUpperCase(), // Ensure uppercase
+        username: decodeURIComponent(username)
+      });
+    });
+
+    socketInstance.on('disconnect', (reason) => {
+      setIsConnected(false);
+      console.log('Disconnected from server:', reason);
+    });
+
+    socketInstance.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setError('Connection failed. Retrying...');
+    });
+
+    socketInstance.on('reconnect', (attemptNumber) => {
+      console.log('Reconnected after', attemptNumber, 'attempts');
+      setError('');
+      // Rejoin room after reconnection
+      socketInstance.emit('join-room', {
+        roomCode: code.toUpperCase(),
+        username: decodeURIComponent(username)
+      });
+    });
+
+    socketInstance.on('reconnect_error', (error) => {
+      console.error('Reconnection failed:', error);
+    });
+
+    socketInstance.on('joined-room', (data) => {
+      setRoomData(data);
+      setIsHost(data.isHost);
+      setCurrentVideo(data.currentVideo);
+      setMessages(data.messages || []);
+      setUsers(data.users || []);
+      setError(''); // Clear any connection errors
+    });
+
+    socketInstance.on('error', (data) => {
+      console.error('Socket error:', data.message);
+      setError(data.message);
+      // If room not found, redirect to home after 3 seconds
+      if (data.message === 'Room not found') {
+        setTimeout(() => {
+          router.push('/');
+        }, 3000);
+      }
+    });
+
+    // Video events
+    socketInstance.on('video-loaded', (data) => {
+      setCurrentVideo({ videoId: data.videoId, title: data.title });
+      setIsVideoLoading(false);
+      loadVideoInPlayer(data.videoId);
+    });
+
+    socketInstance.on('video-play', (data) => {
+      if (playerRef.current && playerRef.current.seekTo && playerRef.current.playVideo) {
+        playerRef.current.seekTo(data.time, true);
+        playerRef.current.playVideo();
+      }
+    });
+
+    socketInstance.on('video-pause', (data) => {
+      if (playerRef.current && playerRef.current.seekTo && playerRef.current.pauseVideo) {
+        playerRef.current.seekTo(data.time, true);
+        playerRef.current.pauseVideo();
+      }
+    });
+
+    socketInstance.on('video-seek', (data) => {
+      if (playerRef.current && playerRef.current.seekTo) {
+        playerRef.current.seekTo(data.time, true);
+      }
+    });
+
+    // Chat events
+    socketInstance.on('new-message', (message) => {
+      setMessages(prev => [...prev, message]);
+    });
+
+    // User events
+    socketInstance.on('user-joined', (data) => {
+      setUsers(prev => [...prev, data.user]);
+    });
+
+    socketInstance.on('user-left', (data) => {
+      setUsers(prev => prev.filter(u => u.id !== data.user.id));
+      if (data.newHost) {
+        setIsHost(data.newHost.id === socketInstance.id);
+      }
+    });
+
+    socketInstance.on('new-host', (data) => {
+      setIsHost(data.newHost.id === socketInstance.id);
+    });
+
+    return () => {
+      console.log('Cleaning up socket connection');
+      socketInstance.disconnect();
+    };
+  }, [code, username]); // Only depend on code and username to prevent unnecessary reconnections
+
+  /**
+   * Auto-scroll chat to bottom
+   */
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  /**
+   * Create YouTube player when ready and video is loaded
+   */
+  useEffect(() => {
+    if (isPlayerReady && currentVideo && currentVideo.videoId && !playerRef.current) {
+      loadVideoInPlayer(currentVideo.videoId);
+    }
+  }, [isPlayerReady, currentVideo, loadVideoInPlayer]);
 
   /**
    * Load a new video (host only)
