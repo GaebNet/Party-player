@@ -30,11 +30,11 @@ function MyApp({ Component, pageProps }) {
         document.head.appendChild(metaStatusBar);
       }
 
-      // Add iOS app capable
-      let metaAppCapable = document.querySelector('meta[name="apple-mobile-web-app-capable"]');
+      // Add iOS app capable (using modern meta tag)
+      let metaAppCapable = document.querySelector('meta[name="mobile-web-app-capable"]');
       if (!metaAppCapable) {
         metaAppCapable = document.createElement('meta');
-        metaAppCapable.name = 'apple-mobile-web-app-capable';
+        metaAppCapable.name = 'mobile-web-app-capable';
         metaAppCapable.content = 'yes';
         document.head.appendChild(metaAppCapable);
       }

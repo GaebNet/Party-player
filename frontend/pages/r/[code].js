@@ -41,15 +41,33 @@ export default function Room() {
    */
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.YT) {
+      console.log('Loading YouTube IFrame API...');
+
+      // Add API script
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
+      tag.async = true;
       const firstScriptTag = document.getElementsByTagName('script')[0];
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
+      // Set up callback
       window.onYouTubeIframeAPIReady = () => {
+        console.log('YouTube API loaded successfully');
         setIsPlayerReady(true);
       };
+
+      // Fallback: check if API is already loaded
+      setTimeout(() => {
+        if (window.YT && window.YT.Player && !isPlayerReady) {
+          console.log('YouTube API was already loaded');
+          setIsPlayerReady(true);
+        } else if (!isPlayerReady) {
+          console.warn('YouTube API failed to load, videos may not work');
+          setError('YouTube API failed to load. Videos may not work properly.');
+        }
+      }, 5000);
     } else if (window.YT && window.YT.Player) {
+      console.log('YouTube API already available');
       setIsPlayerReady(true);
     }
 
@@ -71,8 +89,9 @@ export default function Room() {
 
     socketInstance.on('connect', () => {
       setIsConnected(true);
+      console.log('Connected to server, joining room:', code);
       socketInstance.emit('join-room', { 
-        roomCode: code, 
+        roomCode: code.toUpperCase(), // Ensure uppercase
         username: decodeURIComponent(username) 
       });
     });
@@ -90,7 +109,14 @@ export default function Room() {
     });
 
     socketInstance.on('error', (data) => {
+      console.error('Socket error:', data.message);
       setError(data.message);
+      // If room not found, redirect to home after 3 seconds
+      if (data.message === 'Room not found') {
+        setTimeout(() => {
+          router.push('/');
+        }, 3000);
+      }
     });
 
     // Video events
@@ -166,12 +192,31 @@ export default function Room() {
    * Load video in YouTube player
    */
   const loadVideoInPlayer = (videoId) => {
-    if (!window.YT || !window.YT.Player) return;
+    console.log('loadVideoInPlayer called with videoId:', videoId);
+
+    if (!window.YT || !window.YT.Player) {
+      console.error('YouTube API not ready, cannot load video');
+      setError('YouTube API not loaded. Please refresh the page and try again.');
+      setIsVideoLoading(false);
+      return;
+    }
+
+    // Check if youtube-player element exists
+    const playerElement = document.getElementById('youtube-player');
+    console.log('Player element exists:', !!playerElement);
+
+    if (!playerElement) {
+      console.error('YouTube player element not found');
+      return;
+    }
 
     // Destroy existing player
     if (playerRef.current) {
+      console.log('Destroying existing player');
       playerRef.current.destroy();
     }
+
+    console.log('Creating new YouTube player...');
 
     // Create new player
     playerRef.current = new window.YT.Player('youtube-player', {
@@ -184,22 +229,28 @@ export default function Room() {
         disablekb: !isHost ? 1 : 0,
         fs: 1,
         rel: 0,
-        showinfo: 0
+        showinfo: 0,
+        modestbranding: 1
       },
       events: {
         onReady: (event) => {
-          console.log('Player ready');
+          console.log('YouTube player ready for video:', videoId);
         },
         onStateChange: (event) => {
+          console.log('Player state changed:', event.data);
           if (!isHost) return; // Only host can trigger sync events
-          
+
           const currentTime = event.target.getCurrentTime();
-          
+
           if (event.data === window.YT.PlayerState.PLAYING) {
-            socket?.emit('video-play', { roomCode: code, currentTime });
+            socket?.emit('video-play', { roomCode: code.toUpperCase(), currentTime });
           } else if (event.data === window.YT.PlayerState.PAUSED) {
-            socket?.emit('video-pause', { roomCode: code, currentTime });
+            socket?.emit('video-pause', { roomCode: code.toUpperCase(), currentTime });
           }
+        },
+        onError: (event) => {
+          console.error('YouTube player error:', event.data);
+          setError(`YouTube player error: ${event.data}`);
         }
       }
     });
@@ -223,7 +274,7 @@ export default function Room() {
     setError('');
     
     socket.emit('load-video', { 
-      roomCode: code, 
+      roomCode: code.toUpperCase(), 
       videoUrl: videoUrl.trim() 
     });
     
@@ -237,7 +288,7 @@ export default function Room() {
     if (!newMessage.trim() || !socket) return;
 
     socket.emit('send-message', {
-      roomCode: code,
+      roomCode: code.toUpperCase(),
       message: newMessage.trim()
     });
 
@@ -278,7 +329,7 @@ export default function Room() {
     setIsVideoLoading(true);
     
     socket.emit('load-video', { 
-      roomCode: code, 
+      roomCode: code.toUpperCase(), 
       videoUrl 
     });
   };
@@ -341,7 +392,6 @@ export default function Room() {
               </button>
               <h1 className="text-xl font-bold">Room {code}</h1>
               {isHost && <span className="bg-purple-600 text-xs px-2 py-1 rounded">HOST</span>}
-              }
             </div>
             
             <div className="flex items-center space-x-4">
