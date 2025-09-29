@@ -5,9 +5,18 @@ const cors = require('cors');
 
 const app = express();
 const server = createServer(app);
+// CORS configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [
+      'https://multiplayeryt.netlify.app',
+      process.env.FRONTEND_URL, // For custom domains
+      process.env.RAILWAY_STATIC_URL, // Railway provides this
+    ].filter(Boolean) // Remove undefined values
+  : ['http://localhost:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? false : "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST"]
   }
 });
@@ -15,6 +24,15 @@ const io = new Server(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    rooms: Object.keys(rooms).length
+  });
+});
 
 /**
  * In-memory storage for rooms
