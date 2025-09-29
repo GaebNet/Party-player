@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { io } from 'socket.io-client';
@@ -76,7 +76,7 @@ export default function Room() {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [isPlayerReady]);
 
   /**
    * Initialize socket connection and join room
@@ -170,7 +170,7 @@ export default function Room() {
     return () => {
       socketInstance.disconnect();
     };
-  }, [code, username]);
+  }, [code, username, router, loadVideoInPlayer]);
 
   /**
    * Auto-scroll chat to bottom
@@ -186,12 +186,12 @@ export default function Room() {
     if (isPlayerReady && currentVideo && currentVideo.videoId && !playerRef.current) {
       loadVideoInPlayer(currentVideo.videoId);
     }
-  }, [isPlayerReady, currentVideo]);
+  }, [isPlayerReady, currentVideo, loadVideoInPlayer]);
 
   /**
    * Load video in YouTube player
    */
-  const loadVideoInPlayer = (videoId) => {
+  const loadVideoInPlayer = useCallback((videoId) => {
     console.log('loadVideoInPlayer called with videoId:', videoId);
 
     if (!window.YT || !window.YT.Player) {
@@ -254,7 +254,7 @@ export default function Room() {
         }
       }
     });
-  };
+  }, [isHost, socket, code, setError, setIsVideoLoading]);
 
   /**
    * Load a new video (host only)
@@ -513,7 +513,7 @@ export default function Room() {
                     </div>
                   ) : (
                     <p className="text-gray-500 text-sm">
-                      Load a video and click "Get Recommendations" to see AI-suggested videos
+                      Load a video and click &quot;Get Recommendations&quot; to see AI-suggested videos
                     </p>
                   )}
                 </div>
