@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { io } from 'socket.io-client';
+import ServerStatus from '../../components/ServerStatus';
 
 /**
  * Room page component - main watch party interface
@@ -440,6 +441,7 @@ export default function Room() {
       </Head>
 
       <div className="min-h-screen bg-gray-900 text-white">
+        <ServerStatus />
         {/* Header */}
         <div className="bg-gray-800 border-b border-gray-700 p-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between">

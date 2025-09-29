@@ -26,7 +26,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_SERVER_URL: process.env.NEXT_PUBLIC_SERVER_URL ||
       (process.env.NODE_ENV === 'production'
-        ? 'https://your-backend-url-here' // Replace with your actual backend URL
+        ? 'https://party-player.onrender.com' // Render backend URL
         : 'http://localhost:3001')
   }
 };

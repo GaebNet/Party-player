@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import ServerStatus from '../components/ServerStatus';
 
 /**
  * Landing page for creating or joining rooms
@@ -104,6 +105,7 @@ export default function Home() {
       </Head>
 
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <ServerStatus />
         <div className="max-w-md w-full space-y-8">
           {/* Header */}
           <div className="text-center">
