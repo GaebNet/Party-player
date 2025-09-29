@@ -24,9 +24,10 @@ const nextConfig = {
 
   // Environment variables for client-side
   env: {
-    NEXT_PUBLIC_SERVER_URL: process.env.NODE_ENV === 'production' 
-      ? 'https://your-production-server.com' 
-      : 'http://localhost:3001'
+    NEXT_PUBLIC_SERVER_URL: process.env.NEXT_PUBLIC_SERVER_URL ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://your-backend-url-here' // Replace with your actual backend URL
+        : 'http://localhost:3001')
   }
 };
 
