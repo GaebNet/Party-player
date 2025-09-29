@@ -9,10 +9,14 @@ const server = createServer(app);
 const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [
       'https://multiplayeryt.netlify.app',
+      'https://multiplayeryt.netlify.app/', // with trailing slash
       process.env.FRONTEND_URL, // For custom domains
       process.env.RAILWAY_STATIC_URL, // Railway provides this
     ].filter(Boolean) // Remove undefined values
   : ['http://localhost:3000'];
+
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Allowed origins:', allowedOrigins);
 
 const io = new Server(server, {
   cors: {
@@ -22,7 +26,12 @@ const io = new Server(server, {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Global error handler
