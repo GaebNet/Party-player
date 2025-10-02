@@ -96,7 +96,19 @@ export default function ModernVoiceChat({ socket, roomCode, username, users, isH
       localStreamRef.current.getAudioTracks().forEach(track => {
         track.enabled = isMuted;
       });
-      setIsMuted(!isMuted);
+      const newMutedState = !isMuted;
+      setIsMuted(newMutedState);
+      
+      console.log('Toggling mute state:', { newMutedState, roomCode });
+      
+      // Emit mute status to server
+      if (newMutedState) {
+        console.log('Emitting user-muted event');
+        socket.emit('user-muted', { roomCode });
+      } else {
+        console.log('Emitting user-unmuted event');
+        socket.emit('user-unmuted', { roomCode });
+      }
     }
   };
 
@@ -739,57 +751,6 @@ export default function ModernVoiceChat({ socket, roomCode, username, users, isH
         )}
 
         {/* Enhanced Participants list */}
-        {voiceUsers.size > 0 && (
-          <div className="mt-6">
-            <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-sm rounded-xl p-4 border border-purple-500/20">
-              <h4 className="text-purple-200 font-medium text-sm mb-3 flex items-center">
-                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 715 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                </svg>
-                In Voice Chat
-              </h4>
-              <div className="space-y-2">
-                {users
-                  .filter(user => voiceUsers.has(user.id))
-                  .map(user => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between bg-white/5 rounded-lg p-3 border border-white/10 hover:bg-white/10 transition-colors duration-200"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="relative">
-                          <img
-                            src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
-                            alt={user.username}
-                            className="w-8 h-8 rounded-full border-2 border-purple-400 shadow-sm object-cover"
-                            onError={(e) => {
-                              e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
-                            }}
-                          />
-                          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
-                        </div>
-                        <div>
-                          <span className="text-white font-medium">
-                            {user.username}
-                            {user.id === socket?.id && (
-                              <span className="ml-2 text-xs text-purple-300">(You)</span>
-                            )}
-                          </span>
-                          <div className="text-xs text-purple-200">Connected</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-4 bg-green-400 rounded-sm animate-pulse"></div>
-                        <div className="w-2 h-3 bg-green-400/70 rounded-sm animate-pulse delay-75"></div>
-                        <div className="w-2 h-5 bg-green-400 rounded-sm animate-pulse delay-150"></div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Decorative elements */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
           <div className="absolute top-4 right-4 w-16 h-16 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-full blur-xl"></div>
