@@ -1,8 +1,27 @@
 {
   "name": "ephemeral-watch-party",
   "version": "1.0.0",
-  "description": "A complete ephemeral watch party PWA for synchronized YouTube viewing",
   "private": true,
+  "description": "A complete ephemeral watch party PWA for synchronized YouTube viewing",
+  "keywords": [
+    "watch-party",
+    "pwa",
+    "youtube",
+    "real-time",
+    "chat"
+  ],
+  "homepage": "https://github.com/PATILYASHH/Party-player#readme",
+  "bugs": {
+    "url": "https://github.com/PATILYASHH/Party-player/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PATILYASHH/Party-player.git"
+  },
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "postcss.config.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
     "dev:server": "cd server && node index.js",
@@ -13,9 +32,23 @@
     "start:frontend": "cd frontend && next start",
     "install:all": "npm install && cd server && npm install && cd ../frontend && npm install"
   },
-  "keywords": ["watch-party", "pwa", "youtube", "real-time", "chat"],
-  "author": "",
-  "license": "MIT",
+  "dependencies": {
+    "cliui": "^8.0.1",
+    "date-fns": "^2.30.0",
+    "escalade": "^3.2.0",
+    "get-caller-file": "^2.0.5",
+    "is-fullwidth-code-point": "^3.0.0",
+    "lodash": "^4.17.21",
+    "require-directory": "^2.1.1",
+    "rxjs": "^7.8.2",
+    "shell-quote": "^1.8.3",
+    "spawn-command": "^0.0.2",
+    "tree-kill": "^1.2.2",
+    "tslib": "^2.8.1",
+    "y18n": "^5.0.8",
+    "yargs": "^17.7.2",
+    "yargs-parser": "^21.1.1"
+  },
   "devDependencies": {
     "concurrently": "^8.2.2"
   }

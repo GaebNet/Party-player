@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { io } from 'socket.io-client';
 import ServerStatus from '../../components/ServerStatus';
+import VoiceChat from '../../components/ModernVoiceChat';
 
 /**
  * Room page component - main watch party interface
@@ -10,8 +11,7 @@ import ServerStatus from '../../components/ServerStatus';
  */
 export default function Room() {
   const router = useRouter();
-  const { code } = router.query;
-  const { username } = router.query;
+  const { code, username, avatar } = router.query;
   
   // Socket and room state
   const [socket, setSocket] = useState(null);
@@ -199,7 +199,8 @@ export default function Room() {
       console.log('Connected to server, joining room:', code);
       socketInstance.emit('join-room', {
         roomCode: code.toUpperCase(), // Ensure uppercase
-        username: decodeURIComponent(username)
+        username: decodeURIComponent(username),
+        avatar: avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
       });
     });
 
@@ -219,7 +220,8 @@ export default function Room() {
       // Rejoin room after reconnection
       socketInstance.emit('join-room', {
         roomCode: code.toUpperCase(),
-        username: decodeURIComponent(username)
+        username: decodeURIComponent(username),
+        avatar: avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
       });
     });
 
@@ -228,6 +230,8 @@ export default function Room() {
     });
 
     socketInstance.on('joined-room', (data) => {
+      console.log('Joined room data:', data);
+      console.log('Users with avatars:', data.users?.map(u => ({ username: u.username, hasAvatar: !!u.avatar })));
       setRoomData(data);
       setIsHost(data.isHost);
       setCurrentVideo(data.currentVideo);
@@ -276,15 +280,18 @@ export default function Room() {
 
     // Chat events
     socketInstance.on('new-message', (message) => {
+      console.log('New message received:', message);
       setMessages(prev => [...prev, message]);
     });
 
     // User events
     socketInstance.on('user-joined', (data) => {
+      console.log('User joined:', data.user);
       setUsers(prev => [...prev, data.user]);
     });
 
     socketInstance.on('user-left', (data) => {
+      console.log('User left:', data.user);
       setUsers(prev => prev.filter(u => u.id !== data.user.id));
       if (data.newHost) {
         setIsHost(data.newHost.id === socketInstance.id);
@@ -486,10 +493,10 @@ export default function Room() {
 
         {/* Main Content */}
         <div className="max-w-7xl mx-auto p-4">
-          <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'}`}>
+          <div className="space-y-6">
             
             {/* Video Section */}
-            <div className={`${isMobile ? 'order-1' : 'lg:col-span-2'} space-y-4`}>
+            <div className="space-y-4">
               
               {/* Video Controls - Host Only */}
               {isHost && (
@@ -582,66 +589,212 @@ export default function Room() {
               )}
             </div>
 
-            {/* Sidebar */}
-            <div className={`${isMobile ? 'order-2' : ''} space-y-4`}>
-              
-              {/* Users List */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="font-semibold mb-3">Users ({users.length})</h3>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
+            {/* Users Section - Now below video */}
+            <div className="w-full">
+              <div className="bg-gradient-to-r from-gray-800 via-gray-800 to-gray-700 rounded-xl p-4 border border-gray-600 shadow-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
+                    👥 Users in Room ({users.length})
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                    <span className="text-sm text-gray-300">
+                      {isConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
                   {users.map((user) => (
-                    <div key={user.id} className="flex items-center space-x-2 text-sm">
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                      <span className={user.id === socket?.id ? 'font-semibold text-purple-400' : ''}>
-                        {user.username}
-                      </span>
-                      {roomData?.host === user.id && (
-                        <span className="bg-purple-600 text-xs px-1 py-0.5 rounded">HOST</span>
-                      )}
+                    <div 
+                      key={user.id} 
+                      className="group bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-3 border border-gray-600 hover:border-purple-500 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/20 transform hover:scale-105"
+                    >
+                      <div className="flex flex-col items-center space-y-2">
+                        {/* Avatar */}
+                        <div className="relative">
+                          <img
+                            src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
+                            alt={user.username}
+                            className="w-10 h-10 rounded-full border-2 border-purple-400 shadow-lg object-cover"
+                            onError={(e) => {
+                              e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                            }}
+                          />
+                          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-800 animate-pulse"></div>
+                        </div>
+                        
+                        {/* Username */}
+                        <div className="text-center">
+                          <div className={`text-sm font-medium truncate max-w-full ${
+                            user.id === socket?.id 
+                              ? 'text-purple-300 font-bold' 
+                              : 'text-white'
+                          }`}>
+                            {user.username}
+                            {user.id === socket?.id && (
+                              <span className="block text-xs text-purple-400">(You)</span>
+                            )}
+                          </div>
+                          
+                          {/* Host badge */}
+                          {roomData?.host === user.id && (
+                            <div className="mt-1">
+                              <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-0.5 rounded-full font-medium shadow-sm">
+                                👑 HOST
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Chat */}
-              <div className="bg-gray-800 rounded-lg p-4 flex flex-col h-96">
-                <h3 className="font-semibold mb-3">Chat</h3>
-                
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-2">
-                  {messages.length > 0 ? (
-                    messages.map((msg) => (
-                      <div key={msg.id} className="text-sm">
-                        <span className="font-medium text-purple-400">{msg.username}:</span>{' '}
-                        <span className="text-gray-300">{msg.message}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-gray-500 text-sm text-center py-8">
-                      No messages yet. Start the conversation!
+            {/* Bottom Section: Voice Chat and Chat */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Voice Chat */}
+              <div>
+                <VoiceChat 
+                  socket={socket}
+                  roomCode={code}
+                  username={username}
+                  users={users}
+                  isHost={isHost}
+                />
+              </div>
+
+              {/* Modern Chat */}
+              <div className="bg-gradient-to-br from-indigo-900/90 via-purple-900/90 to-pink-900/90 backdrop-blur-sm rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+                {/* Chat Header */}
+                <div className="bg-gradient-to-r from-purple-600/30 to-pink-600/30 backdrop-blur-sm p-4 border-b border-white/10">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg">
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                      </svg>
                     </div>
-                  )}
-                  <div ref={messagesEndRef} />
+                    <div>
+                      <h3 className="text-white font-bold text-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
+                        Chat
+                      </h3>
+                      <p className="text-purple-200 text-sm">
+                        {messages.length} message{messages.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Message Input */}
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => handleKeyPress(e, sendMessage)}
-                    placeholder="Type a message..."
-                    maxLength={200}
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim()}
-                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-3 py-2 rounded transition-colors text-sm"
-                  >
-                    Send
-                  </button>
+                {/* Messages Container */}
+                <div className="flex flex-col h-80">
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-purple-500 scrollbar-track-transparent">
+                    {messages.length > 0 ? (
+                      messages.map((msg, index) => (
+                        <div key={msg.id} className="group">
+                          <div className={`flex items-start space-x-3 ${msg.username === username ? 'justify-end' : 'justify-start'}`}>
+                            {/* Avatar for other users (left side) */}
+                            {msg.username !== username && (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
+                                  alt={msg.username}
+                                  className="w-8 h-8 rounded-full border-2 border-purple-400 shadow-sm object-cover"
+                                  onError={(e) => {
+                                    e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                                  }}
+                                />
+                              </div>
+                            )}
+                            
+                            {/* Message bubble */}
+                            <div className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border transition-all duration-300 group-hover:shadow-xl ${
+                              msg.username === username
+                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white border-purple-500/20 shadow-purple-500/20'
+                                : 'bg-white/10 text-white border-white/20 shadow-white/10'
+                            }`}>
+                              {msg.username !== username && (
+                                <div className="text-xs font-medium text-purple-300 mb-1">
+                                  {msg.username}
+                                </div>
+                              )}
+                              <div className="text-sm leading-relaxed break-words">
+                                {msg.message}
+                              </div>
+                              <div className={`text-xs mt-1 opacity-70 ${
+                                msg.username === username ? 'text-purple-100' : 'text-gray-300'
+                              }`}>
+                                {new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Avatar for current user (right side) */}
+                            {msg.username === username && (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={msg.avatar || (avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`)}
+                                  alt={username}
+                                  className="w-8 h-8 rounded-full border-2 border-purple-400 shadow-sm object-cover"
+                                  onError={(e) => {
+                                    e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4 opacity-50">💬</div>
+                        <div className="text-purple-200 text-sm">
+                          No messages yet
+                        </div>
+                        <div className="text-purple-300 text-xs mt-1">
+                          Start the conversation!
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Message Input */}
+                  <div className="p-4 border-t border-white/10 bg-black/20">
+                    <div className="flex space-x-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          onKeyPress={(e) => handleKeyPress(e, sendMessage)}
+                          placeholder="Type your message..."
+                          maxLength={200}
+                          className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-purple-200 text-sm transition-all duration-300 hover:bg-white/15"
+                        />
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-purple-300">
+                          {newMessage.length}/200
+                        </div>
+                      </div>
+                      <button
+                        onClick={sendMessage}
+                        disabled={!newMessage.trim()}
+                        className="group relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 disabled:from-gray-600 disabled:to-gray-700 px-4 py-3 rounded-xl font-medium text-white transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100 shadow-lg hover:shadow-purple-500/25"
+                      >
+                        <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                        <div className="relative">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                          </svg>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
