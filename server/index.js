@@ -435,6 +435,19 @@ io.on('connection', (socket) => {
   });
 
   /**
+   * Mute Status Events
+   */
+  socket.on('user-muted', ({ roomCode }) => {
+    console.log(`User ${socket.id} muted in room ${roomCode}`);
+    socket.to(roomCode).emit('user-muted', { userId: socket.id });
+  });
+
+  socket.on('user-unmuted', ({ roomCode }) => {
+    console.log(`User ${socket.id} unmuted in room ${roomCode}`);
+    socket.to(roomCode).emit('user-unmuted', { userId: socket.id });
+  });
+
+  /**
    * Handle disconnection
    */
   socket.on('disconnect', () => {

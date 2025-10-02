@@ -37,6 +37,10 @@ export default function Room() {
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Voice chat state
+  const [voiceUsers, setVoiceUsers] = useState([]);
+  const [mutedUsers, setMutedUsers] = useState([]);
+
   /**
    * Load YouTube IFrame API
    */
@@ -300,6 +304,42 @@ export default function Room() {
 
     socketInstance.on('new-host', (data) => {
       setIsHost(data.newHost.id === socketInstance.id);
+    });
+
+    // Voice chat events
+    socketInstance.on('voice-chat-users', (users) => {
+      console.log('Voice chat users updated:', users);
+      setVoiceUsers(users || []);
+    });
+
+    socketInstance.on('user-joined-voice', (data) => {
+      console.log('User joined voice:', data);
+      setVoiceUsers(prev => [...new Set([...prev, data.callerID])]);
+    });
+
+    socketInstance.on('user-left-voice', (data) => {
+      console.log('User left voice:', data);
+      setVoiceUsers(prev => prev.filter(id => id !== data.callerID));
+      setMutedUsers(prev => prev.filter(id => id !== data.callerID));
+    });
+
+    // Mute status events
+    socketInstance.on('user-muted', (data) => {
+      console.log('User muted received:', data);
+      setMutedUsers(prev => {
+        const newMutedUsers = [...new Set([...prev, data.userId])];
+        console.log('Updated muted users:', newMutedUsers);
+        return newMutedUsers;
+      });
+    });
+
+    socketInstance.on('user-unmuted', (data) => {
+      console.log('User unmuted received:', data);
+      setMutedUsers(prev => {
+        const newMutedUsers = prev.filter(id => id !== data.userId);
+        console.log('Updated muted users:', newMutedUsers);
+        return newMutedUsers;
+      });
     });
 
     return () => {
@@ -605,50 +645,108 @@ export default function Room() {
                 </div>
                 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-                  {users.map((user) => (
-                    <div 
-                      key={user.id} 
-                      className="group bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-3 border border-gray-600 hover:border-purple-500 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/20 transform hover:scale-105"
-                    >
-                      <div className="flex flex-col items-center space-y-2">
-                        {/* Avatar */}
-                        <div className="relative">
-                          <img
-                            src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
-                            alt={user.username}
-                            className="w-10 h-10 rounded-full border-2 border-purple-400 shadow-lg object-cover"
-                            onError={(e) => {
-                              e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
-                            }}
-                          />
-                          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-800 animate-pulse"></div>
-                        </div>
-                        
-                        {/* Username */}
-                        <div className="text-center">
-                          <div className={`text-sm font-medium truncate max-w-full ${
-                            user.id === socket?.id 
-                              ? 'text-purple-300 font-bold' 
-                              : 'text-white'
-                          }`}>
-                            {user.username}
-                            {user.id === socket?.id && (
-                              <span className="block text-xs text-purple-400">(You)</span>
+                  {users.map((user) => {
+                    const isInVoiceChat = voiceUsers.includes(user.id);
+                    const isMuted = mutedUsers.includes(user.id);
+                    
+                    // Debug logging
+                    console.log('User card render:', {
+                      username: user.username,
+                      userId: user.id,
+                      isInVoiceChat,
+                      isMuted,
+                      voiceUsers,
+                      mutedUsers
+                    });
+                    
+                    return (
+                      <div 
+                        key={user.id} 
+                        className={`group rounded-lg p-3 border transition-all duration-300 hover:shadow-lg transform hover:scale-105 ${
+                          isInVoiceChat && isMuted
+                            ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 border-red-300 border-2 hover:border-red-200 hover:shadow-red-300/80 shadow-red-400/70 ring-2 ring-red-400/60'
+                            : isInVoiceChat 
+                            ? 'bg-gradient-to-br from-indigo-600/40 via-purple-700/30 to-pink-800/40 border-purple-400/60 hover:border-pink-300 hover:shadow-purple-500/30 shadow-purple-500/20' 
+                            : 'bg-gradient-to-br from-gray-700 to-gray-800 border-gray-600 hover:border-purple-500 hover:shadow-purple-500/20'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center space-y-2">
+                          {/* Avatar */}
+                          <div className="relative">
+                            <img
+                              src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
+                              alt={user.username}
+                              className={`w-10 h-10 rounded-full border-2 shadow-lg object-cover ${
+                                isInVoiceChat 
+                                  ? isMuted 
+                                    ? 'border-red-400 ring-4 ring-red-500/60 shadow-red-500/50' 
+                                    : 'border-purple-400' 
+                                  : 'border-purple-400'
+                              }`}
+                              onError={(e) => {
+                                e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                              }}
+                            />
+                            {/* Online indicator */}
+                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-800 animate-pulse ${
+                              isInVoiceChat 
+                                ? isMuted 
+                                  ? 'bg-red-500 shadow-lg shadow-red-500/50' 
+                                  : 'bg-purple-400' 
+                                : 'bg-green-400'
+                            }`}></div>
+                            
+                            {/* Voice chat mic icon */}
+                            {isInVoiceChat && (
+                              <div className={`absolute -top-1 -left-1 w-4 h-4 rounded-full border-2 border-gray-800 flex items-center justify-center shadow-lg ${
+                                isMuted 
+                                  ? 'bg-gradient-to-r from-red-500 to-red-600 ring-2 ring-red-400/50' 
+                                  : 'bg-gradient-to-r from-purple-500 to-pink-500'
+                              }`}>
+                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  {isMuted ? (
+                                    <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 715 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-14-14z" clipRule="evenodd" />
+                                  ) : (
+                                    <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 715 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                                  )}
+                                </svg>
+                              </div>
                             )}
                           </div>
                           
-                          {/* Host badge */}
-                          {roomData?.host === user.id && (
-                            <div className="mt-1">
-                              <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-0.5 rounded-full font-medium shadow-sm">
-                                👑 HOST
-                              </span>
+                          {/* Username */}
+                          <div className="text-center">
+                            <div className={`text-sm font-medium truncate max-w-full ${
+                              user.id === socket?.id 
+                                ? 'text-purple-300 font-bold' 
+                                : isInVoiceChat && isMuted
+                                ? 'text-red-300 font-semibold drop-shadow-lg'
+                                : isInVoiceChat
+                                ? 'text-pink-200 font-semibold'
+                                : 'text-white'
+                            }`}>
+                              {user.username}
+                              {user.id === socket?.id && (
+                                <span className="block text-xs text-purple-400">(You)</span>
+                              )}
+                              {isInVoiceChat && user.id !== socket?.id && (
+                                <span className="block text-xs text-pink-400">🎤 In Voice</span>
+                              )}
                             </div>
-                          )}
+                            
+                            {/* Host badge */}
+                            {roomData?.host === user.id && (
+                              <div className="mt-1">
+                                <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-0.5 rounded-full font-medium shadow-sm">
+                                  👑 HOST
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
