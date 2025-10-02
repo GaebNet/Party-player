@@ -200,7 +200,9 @@ io.on('connection', (socket) => {
   /**
    * Join a room
    */
-  socket.on('join-room', ({ roomCode, username }) => {
+  socket.on('join-room', ({ roomCode, username, avatar }) => {
+    console.log('Join room request:', { roomCode, username, avatar: avatar ? 'provided' : 'not provided' });
+    
     const room = rooms[roomCode.toUpperCase()];
     
     if (!room) {
@@ -223,9 +225,15 @@ io.on('connection', (socket) => {
       room.host = socket.id;
     }
 
-    // Add user to room
-    const user = { id: socket.id, username: username || `User${Math.floor(Math.random() * 1000)}` };
+    // Add user to room with avatar
+    const user = { 
+      id: socket.id, 
+      username: username || `User${Math.floor(Math.random() * 1000)}`,
+      avatar: avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
+    };
     room.users.push(user);
+    
+    console.log('User added to room:', { username: user.username, hasAvatar: !!user.avatar });
     
     socket.emit('joined-room', {
       roomCode: roomCode.toUpperCase(),
@@ -238,7 +246,7 @@ io.on('connection', (socket) => {
     // Notify other users
     socket.to(roomCode.toUpperCase()).emit('user-joined', { user, userCount: room.users.length });
     
-    console.log(`User ${username} joined room ${roomCode.toUpperCase()}`);
+    console.log(`User ${username} joined room ${roomCode.toUpperCase()} with avatar`);
   });
 
   /**
@@ -332,9 +340,12 @@ io.on('connection', (socket) => {
     const user = room.users.find(u => u.id === socket.id);
     if (!user) return;
 
+    console.log('Sending message with user avatar:', { username: user.username, hasAvatar: !!user.avatar });
+
     const chatMessage = {
       id: Date.now().toString(),
       username: user.username,
+      avatar: user.avatar,
       message: message.trim(),
       timestamp: Date.now()
     };
@@ -347,6 +358,80 @@ io.on('connection', (socket) => {
     }
 
     io.to(roomCode).emit('new-message', chatMessage);
+  });
+
+  /**
+   * Voice Chat Events - WebRTC Signaling
+   */
+  
+  // Join voice chat
+  socket.on('join-voice-chat', ({ roomCode, username }) => {
+    const room = rooms[roomCode];
+    
+    if (!room) {
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
+
+    // Initialize voice users array if it doesn't exist
+    if (!room.voiceUsers) {
+      room.voiceUsers = [];
+    }
+
+    // Add user to voice chat if not already in
+    if (!room.voiceUsers.includes(socket.id)) {
+      room.voiceUsers.push(socket.id);
+      
+      // Notify all users in the room about voice chat users update
+      io.to(roomCode).emit('voice-chat-users', room.voiceUsers);
+      
+      // Notify other users that this user joined voice
+      socket.to(roomCode).emit('user-joined-voice', { 
+        callerID: socket.id, 
+        username 
+      });
+      
+      console.log(`User ${username} (${socket.id}) joined voice chat in room ${roomCode}`);
+    }
+  });
+
+  // Leave voice chat
+  socket.on('leave-voice-chat', ({ roomCode }) => {
+    const room = rooms[roomCode];
+    
+    if (!room || !room.voiceUsers) return;
+
+    // Remove user from voice chat
+    const userIndex = room.voiceUsers.indexOf(socket.id);
+    if (userIndex !== -1) {
+      room.voiceUsers.splice(userIndex, 1);
+      
+      // Notify all users about voice chat users update
+      io.to(roomCode).emit('voice-chat-users', room.voiceUsers);
+      
+      // Notify other users that this user left voice
+      socket.to(roomCode).emit('user-left-voice', { 
+        callerID: socket.id 
+      });
+      
+      console.log(`User ${socket.id} left voice chat in room ${roomCode}`);
+    }
+  });
+
+  // WebRTC signaling - sending signal to establish connection
+  socket.on('sending-signal', ({ userToCall, callerID, signal }) => {
+    io.to(userToCall).emit('receiving-signal', { 
+      signal, 
+      callerID 
+    });
+  });
+
+  // WebRTC signaling - returning signal to complete connection
+  socket.on('returning-signal', ({ signal, callerID }) => {
+    io.to(callerID).emit('receiving-returned-signal', { 
+      signal, 
+      id: socket.id 
+    });
   });
 
   /**
@@ -363,6 +448,20 @@ io.on('connection', (socket) => {
       if (userIndex !== -1) {
         const user = room.users[userIndex];
         room.users.splice(userIndex, 1);
+        
+        // Remove from voice chat if they were in it
+        if (room.voiceUsers) {
+          const voiceUserIndex = room.voiceUsers.indexOf(socket.id);
+          if (voiceUserIndex !== -1) {
+            room.voiceUsers.splice(voiceUserIndex, 1);
+            // Notify other users that this user left voice
+            socket.to(roomCode).emit('user-left-voice', { 
+              callerID: socket.id 
+            });
+            // Update voice chat users list
+            io.to(roomCode).emit('voice-chat-users', room.voiceUsers);
+          }
+        }
         
         // If host disconnected, assign new host
         if (room.host === socket.id && room.users.length > 0) {
