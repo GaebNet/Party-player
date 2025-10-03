@@ -4,6 +4,9 @@ import Head from 'next/head';
 import { io } from 'socket.io-client';
 import ServerStatus from '../../components/ServerStatus';
 import VoiceChat from '../../components/ModernVoiceChat';
+import InviteFriends from '../../components/InviteFriends';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarUrl, getYouTubeApiUrl } from '../../utils/urls';
 
 /**
  * Room page component - main watch party interface
@@ -11,7 +14,8 @@ import VoiceChat from '../../components/ModernVoiceChat';
  */
 export default function Room() {
   const router = useRouter();
-  const { code, username, avatar } = router.query;
+  const { code } = router.query;
+  const { user, userProfile, loading, sendFriendRequest } = useAuth();
   
   // Socket and room state
   const [socket, setSocket] = useState(null);
@@ -30,16 +34,31 @@ export default function Room() {
   // Chat state
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const messagesEndRef = useRef(null);
 
   // UI state
   const [error, setError] = useState('');
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showInviteFriends, setShowInviteFriends] = useState(false);
+
+  /**
+   * Redirect to login if not authenticated
+   */
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
 
   // Voice chat state
   const [voiceUsers, setVoiceUsers] = useState([]);
   const [mutedUsers, setMutedUsers] = useState([]);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, targetUser: null });
+  const [friendRequestLoading, setFriendRequestLoading] = useState(false);
 
   /**
    * Load YouTube IFrame API
@@ -50,7 +69,7 @@ export default function Room() {
 
       // Add API script
       const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
+      tag.src = getYouTubeApiUrl();
       tag.async = true;
       tag.onerror = () => {
         console.warn('Failed to load YouTube API script');
@@ -59,7 +78,7 @@ export default function Room() {
           if (!window.YT && !isPlayerReady) {
             console.log('Retrying YouTube API load...');
             const retryTag = document.createElement('script');
-            retryTag.src = 'https://www.youtube.com/iframe_api';
+            retryTag.src = getYouTubeApiUrl();
             retryTag.async = true;
             document.head.appendChild(retryTag);
           }
@@ -106,7 +125,15 @@ export default function Room() {
     setIsMobile(window.innerWidth < 768);
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    
+    // Close context menu when clicking elsewhere
+    const handleClickOutside = () => setContextMenu({ show: false, x: 0, y: 0, targetUser: null });
+    document.addEventListener('click', handleClickOutside);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('click', handleClickOutside);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -181,7 +208,10 @@ export default function Room() {
    * Initialize socket connection and join room
    */
   useEffect(() => {
-    if (!code || !username) return;
+    if (!code || !user || !userProfile) return;
+
+    // Reset initial load flag when joining a new room
+    setIsInitialLoad(true);
 
     console.log('Creating Socket.IO connection...');
 
@@ -201,11 +231,18 @@ export default function Room() {
     socketInstance.on('connect', () => {
       setIsConnected(true);
       console.log('Connected to server, joining room:', code);
-      socketInstance.emit('join-room', {
-        roomCode: code.toUpperCase(), // Ensure uppercase
-        username: decodeURIComponent(username),
-        avatar: avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
-      });
+      
+      // Prepare user data for room join
+      const userData = {
+        roomCode: code.toUpperCase(),
+        username: userProfile.display_name,
+        avatar: userProfile.avatar_url,
+        isAuthenticated: true,
+        userId: user.id,
+        userProfile: userProfile
+      };
+      
+      socketInstance.emit('join-room', userData);
     });
 
     socketInstance.on('disconnect', (reason) => {
@@ -221,12 +258,18 @@ export default function Room() {
     socketInstance.on('reconnect', (attemptNumber) => {
       console.log('Reconnected after', attemptNumber, 'attempts');
       setError('');
-      // Rejoin room after reconnection
-      socketInstance.emit('join-room', {
+      
+      // Rejoin room after reconnection with updated user data
+      const userData = {
         roomCode: code.toUpperCase(),
-        username: decodeURIComponent(username),
-        avatar: avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
-      });
+        username: userProfile.display_name,
+        avatar: userProfile.avatar_url,
+        isAuthenticated: true,
+        userId: user.id,
+        userProfile: userProfile
+      };
+      
+      socketInstance.emit('join-room', userData);
     });
 
     socketInstance.on('reconnect_error', (error) => {
@@ -242,6 +285,7 @@ export default function Room() {
       setMessages(data.messages || []);
       setUsers(data.users || []);
       setError(''); // Clear any connection errors
+      setIsInitialLoad(false); // Mark that initial load is complete
     });
 
     socketInstance.on('error', (data) => {
@@ -345,15 +389,18 @@ export default function Room() {
     return () => {
       console.log('Cleaning up socket connection');
       socketInstance.disconnect();
+      setIsInitialLoad(true); // Reset for next room join
     };
-  }, [code, username]); // Only depend on code and username to prevent unnecessary reconnections
+  }, [code, user, userProfile]); // Only depend on code and user to prevent unnecessary reconnections
 
   /**
-   * Auto-scroll chat to bottom
+   * Auto-scroll chat to bottom (only for new messages, not initial load)
    */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!isInitialLoad && messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isInitialLoad]);
 
   /**
    * Create YouTube player when ready and video is loaded
@@ -491,14 +538,93 @@ export default function Room() {
     }
   };
 
-  if (!code || !username) {
+  /**
+   * Handle right-click on user to show context menu
+   */
+  const handleUserRightClick = (e, targetUser) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Don't show context menu for current user
+    if (targetUser.id === user?.id || targetUser.username === userProfile?.display_name) {
+      return;
+    }
+    
+    setContextMenu({
+      show: true,
+      x: e.pageX,
+      y: e.pageY,
+      targetUser
+    });
+  };
+
+  /**
+   * Send friend request to user
+   */
+  const handleSendFriendRequest = async () => {
+    if (!contextMenu.targetUser) return;
+    
+    setFriendRequestLoading(true);
+    setError(''); // Clear any existing errors
+    
+    try {
+      console.log('Sending friend request to:', contextMenu.targetUser.username, 'with ID:', contextMenu.targetUser.id || contextMenu.targetUser.userId);
+      
+      // Use the correct user ID field
+      const targetUserId = contextMenu.targetUser.id || contextMenu.targetUser.userId;
+      if (!targetUserId) {
+        throw new Error('Target user ID not found');
+      }
+      
+      const result = await sendFriendRequest(targetUserId);
+      console.log('Friend request result:', result);
+      
+      if (result && result.error) {
+        console.error('Friend request error:', result.error);
+        setError(`Failed to send friend request: ${result.error.message}`);
+      } else if (result && result.success) {
+        console.log('Friend request sent successfully');
+        // Show success message (you could add a toast notification here)
+        console.log('✅ Friend request sent to', contextMenu.targetUser.username);
+      } else {
+        console.warn('Unexpected friend request response:', result);
+        // Assume success if no error and no explicit success flag
+      }
+    } catch (err) {
+      console.error('Friend request exception:', err);
+      setError(`Failed to send friend request: ${err.message}`);
+    } finally {
+      setFriendRequestLoading(false);
+      setContextMenu({ show: false, x: 0, y: 0, targetUser: null });
+    }
+  };
+
+  if (!code || !user || !userProfile) {
+    if (loading) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p>Loading...</p>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
-          <h1 className="text-2xl mb-4">Invalid Room</h1>
+          <h1 className="text-2xl mb-4">Access Denied</h1>
+          <p className="mb-4">You must be logged in to access this room.</p>
+          <button 
+            onClick={() => router.push('/login')}
+            className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg transition-colors mr-4"
+          >
+            Sign In
+          </button>
           <button 
             onClick={() => router.push('/')}
-            className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg transition-colors"
+            className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg transition-colors"
           >
             Go Home
           </button>
@@ -666,11 +792,22 @@ export default function Room() {
                   <h3 className="font-bold text-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
                     👥 Users in Room ({users.length})
                   </h3>
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                    <span className="text-sm text-gray-300">
-                      {isConnected ? 'Connected' : 'Disconnected'}
-                    </span>
+                  <div className="flex items-center space-x-4">
+                    {/* Invite Friends Button (for authenticated hosts) */}
+                    {user && userProfile && isHost && (
+                      <button
+                        onClick={() => setShowInviteFriends(true)}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-2 rounded-lg transition-all duration-300 transform hover:scale-105 text-sm font-medium"
+                      >
+                        👥 Invite Friends
+                      </button>
+                    )}
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                      <span className="text-sm text-gray-300">
+                        {isConnected ? 'Connected' : 'Disconnected'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 
@@ -692,19 +829,21 @@ export default function Room() {
                     return (
                       <div 
                         key={user.id} 
-                        className={`group rounded-lg p-3 border transition-all duration-300 hover:shadow-lg transform hover:scale-105 ${
+                        className={`group rounded-lg p-3 border transition-all duration-300 hover:shadow-lg transform hover:scale-105 cursor-pointer ${
                           isInVoiceChat && isMuted
                             ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 border-red-300 border-2 hover:border-red-200 hover:shadow-red-300/80 shadow-red-400/70 ring-2 ring-red-400/60'
                             : isInVoiceChat 
                             ? 'bg-gradient-to-br from-indigo-600/40 via-purple-700/30 to-pink-800/40 border-purple-400/60 hover:border-pink-300 hover:shadow-purple-500/30 shadow-purple-500/20' 
                             : 'bg-gradient-to-br from-gray-700 to-gray-800 border-gray-600 hover:border-purple-500 hover:shadow-purple-500/20'
                         }`}
+                        onContextMenu={(e) => handleUserRightClick(e, user)}
+                        title={user.id !== user?.id && user.username !== userProfile?.display_name ? "Right-click to add friend" : ""}
                       >
                         <div className="flex flex-col items-center space-y-2">
                           {/* Avatar */}
                           <div className="relative">
                             <img
-                              src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
+                              src={user.avatar || getAvatarUrl(user.username.charAt(0).toUpperCase())}
                               alt={user.username}
                               className={`w-10 h-10 rounded-full border-2 shadow-lg object-cover ${
                                 isInVoiceChat 
@@ -714,7 +853,7 @@ export default function Room() {
                                   : 'border-purple-400'
                               }`}
                               onError={(e) => {
-                                e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                                e.target.src = getAvatarUrl(user.username.charAt(0).toUpperCase());
                               }}
                             />
                             {/* Online indicator */}
@@ -789,7 +928,7 @@ export default function Room() {
                 <VoiceChat 
                   socket={socket}
                   roomCode={code}
-                  username={username}
+                  username={userProfile.display_name}
                   users={users}
                   isHost={isHost}
                 />
@@ -823,16 +962,16 @@ export default function Room() {
                     {messages.length > 0 ? (
                       messages.map((msg, index) => (
                         <div key={msg.id} className="group">
-                          <div className={`flex items-start space-x-3 ${msg.username === username ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`flex items-start space-x-3 ${msg.username === userProfile.display_name ? 'justify-end' : 'justify-start'}`}>
                             {/* Avatar for other users (left side) */}
-                            {msg.username !== username && (
+                            {msg.username !== userProfile.display_name && (
                               <div className="flex-shrink-0">
                                 <img
-                                  src={msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`}
+                                  src={msg.avatar || getAvatarUrl(msg.username.charAt(0).toUpperCase())}
                                   alt={msg.username}
                                   className="w-8 h-8 rounded-full border-2 border-purple-400 shadow-sm object-cover"
                                   onError={(e) => {
-                                    e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                                    e.target.src = getAvatarUrl(msg.username.charAt(0).toUpperCase());
                                   }}
                                 />
                               </div>
@@ -840,11 +979,11 @@ export default function Room() {
                             
                             {/* Message bubble */}
                             <div className={`max-w-xs lg:max-w-sm px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border transition-all duration-300 group-hover:shadow-xl ${
-                              msg.username === username
+                              msg.username === userProfile.display_name
                                 ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white border-purple-500/20 shadow-purple-500/20'
                                 : 'bg-white/10 text-white border-white/20 shadow-white/10'
                             }`}>
-                              {msg.username !== username && (
+                              {msg.username !== userProfile.display_name && (
                                 <div className="text-xs font-medium text-purple-300 mb-1">
                                   {msg.username}
                                 </div>
@@ -863,14 +1002,14 @@ export default function Room() {
                             </div>
 
                             {/* Avatar for current user (right side) */}
-                            {msg.username === username && (
+                            {msg.username === userProfile.display_name && (
                               <div className="flex-shrink-0">
                                 <img
-                                  src={msg.avatar || (avatar ? decodeURIComponent(avatar) : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`)}
-                                  alt={username}
+                                  src={msg.avatar || userProfile.avatar_url}
+                                  alt={userProfile.display_name}
                                   className="w-8 h-8 rounded-full border-2 border-purple-400 shadow-sm object-cover"
                                   onError={(e) => {
-                                    e.target.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username.charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`;
+                                    e.target.src = userProfile.avatar_url;
                                   }}
                                 />
                               </div>
@@ -928,6 +1067,63 @@ export default function Room() {
             </div>
           </div>
         </div>
+        
+        {/* Invite Friends Modal */}
+        {user && userProfile && (
+          <InviteFriends
+            roomCode={code}
+            roomData={{
+              activity: currentVideo ? `Watching: ${currentVideo.title}` : 'Hanging out',
+              userCount: users.length
+            }}
+            isVisible={showInviteFriends}
+            onClose={() => setShowInviteFriends(false)}
+          />
+        )}
+
+        {/* User Context Menu */}
+        {contextMenu.show && contextMenu.targetUser && (
+          <div
+            className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 py-2 min-w-[180px]"
+            style={{
+              left: `${Math.min(contextMenu.x, window.innerWidth - 200)}px`,
+              top: `${Math.min(contextMenu.y, window.innerHeight - 100)}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-2 border-b border-gray-600">
+              <div className="flex items-center space-x-2">
+                <img
+                  src={contextMenu.targetUser.avatar || getAvatarUrl(contextMenu.targetUser.username.charAt(0).toUpperCase())}
+                  alt={contextMenu.targetUser.username}
+                  className="w-6 h-6 rounded-full border border-purple-400"
+                />
+                <span className="text-white font-medium text-sm truncate">
+                  {contextMenu.targetUser.username}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={handleSendFriendRequest}
+              disabled={friendRequestLoading}
+              className="w-full text-left px-4 py-2 text-sm text-white hover:bg-purple-600/20 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {friendRequestLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                  <span>Sending...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"/>
+                  </svg>
+                  <span>Add Friend</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import '../styles/globals.css';
+import { AuthProvider } from '../contexts/AuthContext';
 
 /**
  * Main Next.js App component
@@ -43,7 +44,11 @@ function MyApp({ Component, pageProps }) {
     addIOSMeta();
   }, []);
 
-  return <Component {...pageProps} />;
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
 }
 
 export default MyApp;
