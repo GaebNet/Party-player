@@ -4,7 +4,6 @@ import Head from 'next/head';
 import Link from 'next/link';
 import ServerStatus from '../components/ServerStatus';
 import { useAuth } from '../contexts/AuthContext';
-import { getAvatarUrl } from '../utils/urls';
 
 /**
  * Landing page - requires authentication
@@ -28,7 +27,7 @@ export default function Home() {
    * Create a new room
    */
   const createRoom = async () => {
-    if (!user || !profile) {
+    if (!user || !userProfile) {
       setError('You must be logged in to create a room');
       return;
     }
@@ -47,8 +46,8 @@ export default function Home() {
       if (data.roomCode) {
         // Navigate to the room with user data
         const params = new URLSearchParams({
-          username: profile.display_name,
-          avatar: encodeURIComponent(profile.avatar_url)
+          username: userProfile.display_name,
+          avatar: encodeURIComponent(userProfile.avatar_url)
         });
         router.push(`/r/${data.roomCode}?${params.toString()}`);
       } else {
@@ -66,7 +65,7 @@ export default function Home() {
    * Join an existing room
    */
   const joinRoom = async () => {
-    if (!user || !profile) {
+    if (!user || !userProfile) {
       setError('You must be logged in to join a room');
       return;
     }
@@ -87,8 +86,8 @@ export default function Home() {
         if (data.exists) {
           // Navigate to the room with user data
           const params = new URLSearchParams({
-            username: profile.display_name,
-            avatar: encodeURIComponent(profile.avatar_url)
+            username: userProfile.display_name,
+            avatar: encodeURIComponent(userProfile.avatar_url)
           });
           router.push(`/r/${roomCode.toUpperCase()}?${params.toString()}`);
         } else {
@@ -112,29 +111,22 @@ export default function Home() {
     }
   };
 
-  // Show loading while checking authentication or loading profile
-  if (loading || (user && !userProfile)) {
+  // Show loading while checking authentication
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>{!user ? 'Loading...' : 'Loading your profile...'}</p>
+          <p>Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Redirect to login if not authenticated
-  if (!user) {
+  // Don't render anything if not authenticated (will redirect)
+  if (!user || !userProfile) {
     return null;
   }
-
-  // Fallback profile if userProfile is still loading
-  const profile = userProfile || {
-    display_name: user.email?.split('@')[0] || 'User',
-    username: user.email?.split('@')[0] || 'user',
-    avatar_url: getAvatarUrl(user.email?.charAt(0).toUpperCase() || 'U')
-  };
 
   return (
     <>
@@ -157,16 +149,14 @@ export default function Home() {
               🎬 Party Player
             </div>
             <div className="flex items-center space-x-4">
-              <Link href="/profile">
-                <div className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 rounded-lg p-2 transition-colors">
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.display_name}
-                    className="w-8 h-8 rounded-full border-2 border-purple-400"
-                  />
-                  <span className="text-white font-medium">{profile.display_name}</span>
-                </div>
-              </Link>
+              <div className="flex items-center space-x-2">
+                <img
+                  src={userProfile.avatar_url}
+                  alt={userProfile.display_name}
+                  className="w-8 h-8 rounded-full border-2 border-purple-400"
+                />
+                <span className="text-white font-medium">{userProfile.display_name}</span>
+              </div>
               <Link href="/friends">
                 <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
                   Friends
@@ -199,13 +189,13 @@ export default function Home() {
             <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-2xl border border-white/20 shadow-2xl p-6">
               <div className="flex items-center space-x-4 mb-6">
                 <img
-                  src={profile.avatar_url}
-                  alt={profile.display_name}
+                  src={userProfile.avatar_url}
+                  alt={userProfile.display_name}
                   className="w-16 h-16 rounded-2xl border-3 border-purple-400 shadow-lg"
                 />
                 <div>
-                  <h3 className="text-white font-bold text-lg">Welcome back, {profile.display_name}!</h3>
-                  <p className="text-purple-200 text-sm">@{profile.username}</p>
+                  <h3 className="text-white font-bold text-lg">Welcome back, {userProfile.display_name}!</h3>
+                  <p className="text-purple-200 text-sm">@{userProfile.username}</p>
                 </div>
               </div>
 

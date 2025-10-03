@@ -8,11 +8,11 @@ const server = createServer(app);
 // CORS configuration
 const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [
-      'https://multiplayeryt.netlify.app',
-      'https://multiplayeryt.netlify.app/', // with trailing slash
+      process.env.NETLIFY_URL || 'https://multiplayeryt.netlify.app',
+      (process.env.NETLIFY_URL || 'https://multiplayeryt.netlify.app') + '/', // with trailing slash
       process.env.FRONTEND_URL, // For custom domains
       process.env.RAILWAY_STATIC_URL, // Railway provides this
-    ].filter(Boolean) // Remove undefined values
+    ].filter(Boolean) // Remove any undefined values
   : ['http://localhost:3000'];
 
 console.log('Environment:', process.env.NODE_ENV);
@@ -171,17 +171,17 @@ app.get('/api/recommend', (req, res) => {
     {
       videoId: 'dQw4w9WgXcQ',
       title: 'Rick Astley - Never Gonna Give You Up',
-      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg'
+      thumbnail: `${process.env.YOUTUBE_THUMBNAIL_URL || 'https://img.youtube.com/vi'}/dQw4w9WgXcQ/default.jpg`
     },
     {
       videoId: 'ZZ5LpwO-An4',
       title: 'HEYYEYAAEYAAAEYAEYAA',
-      thumbnail: 'https://img.youtube.com/vi/ZZ5LpwO-An4/default.jpg'
+      thumbnail: `${process.env.YOUTUBE_THUMBNAIL_URL || 'https://img.youtube.com/vi'}/ZZ5LpwO-An4/default.jpg`
     },
     {
       videoId: 'oHg5SJYRHA0',
       title: 'RickRoll\'d',
-      thumbnail: 'https://img.youtube.com/vi/oHg5SJYRHA0/default.jpg'
+      thumbnail: `${process.env.YOUTUBE_THUMBNAIL_URL || 'https://img.youtube.com/vi'}/oHg5SJYRHA0/default.jpg`
     }
   ];
 
@@ -200,8 +200,14 @@ io.on('connection', (socket) => {
   /**
    * Join a room
    */
-  socket.on('join-room', ({ roomCode, username, avatar }) => {
-    console.log('Join room request:', { roomCode, username, avatar: avatar ? 'provided' : 'not provided' });
+  socket.on('join-room', ({ roomCode, username, avatar, isAuthenticated, userId, userProfile }) => {
+    console.log('Join room request:', { 
+      roomCode, 
+      username, 
+      avatar: avatar ? 'provided' : 'not provided',
+      isAuthenticated: isAuthenticated || false,
+      userId: userId || 'none'
+    });
     
     const room = rooms[roomCode.toUpperCase()];
     
@@ -225,11 +231,15 @@ io.on('connection', (socket) => {
       room.host = socket.id;
     }
 
-    // Add user to room with avatar
+    // Add user to room with enhanced data
     const user = { 
       id: socket.id, 
       username: username || `User${Math.floor(Math.random() * 1000)}`,
-      avatar: avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`
+      avatar: avatar || `${process.env.DICEBEAR_API_URL || 'https://api.dicebear.com/7.x/initials/svg'}?seed=${encodeURIComponent((username || 'Guest').charAt(0).toUpperCase())}&backgroundColor=7c3aed,a855f7,ec4899&textColor=ffffff`,
+      isAuthenticated: isAuthenticated || false,
+      userId: userId || null,
+      userProfile: userProfile || null,
+      joinedAt: new Date().toISOString()
     };
     room.users.push(user);
     
