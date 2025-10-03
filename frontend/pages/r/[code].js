@@ -365,6 +365,35 @@ export default function Room() {
   }, [isPlayerReady, currentVideo, loadVideoInPlayer]);
 
   /**
+   * Copy room code to clipboard
+   */
+  const copyRoomCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code.toUpperCase());
+      // Show temporary success feedback
+      const button = document.querySelector('[data-copy-button]');
+      if (button) {
+        const originalText = button.textContent;
+        button.textContent = '✓ Copied!';
+        button.style.backgroundColor = '#10b981';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.backgroundColor = '';
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Failed to copy room code:', err);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = code.toUpperCase();
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
+  };
+
+  /**
    * Load a new video (host only)
    */
   const loadVideo = () => {
@@ -508,10 +537,11 @@ export default function Room() {
                 {users.length} user{users.length !== 1 ? 's' : ''} online
               </div>
               <button
-                onClick={copyRoomLink}
+                onClick={copyRoomCode}
+                data-copy-button
                 className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
               >
-                📋 Copy Link
+                📋 Copy Code
               </button>
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
             </div>
